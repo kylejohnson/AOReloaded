@@ -134,7 +134,7 @@ std::vector<const RvkSettingInfo*> ChildrenOf(const std::vector<RvkSettingInfo>&
 void AppendCheckBox(char*& out, char* end, const RvkSettingInfo& s, int indent)
 {
     char attrs[128];
-    std::snprintf(attrs, sizeof(attrs), "\" layout_borders=\"Rect(%d,0,0,0)\" opt_type=\"variant\" opt_variable=\"", indent);
+    std::snprintf(attrs, sizeof(attrs), "\" font=\"LARGE\" layout_borders=\"Rect(%d,0,0,0)\" opt_type=\"variant\" opt_variable=\"", indent);
     Append(out, end, "        <OptionCheckBox label=\"");
     AppendEscaped(out, end, s.label);
     Append(out, end, attrs);
@@ -148,7 +148,7 @@ void AppendValue(char*& out, char* end, const RvkSettingInfo& s)
     if (s.type == kChoice && s.choices) {
         Append(out, end, "        <OptionRadioButtonGroup label=\"");
         AppendEscaped(out, end, s.label);
-        Append(out, end, ":\" layout_borders=\"Rect(10,0,0,3)\" opt_type=\"variant\" opt_variable=\"");
+        Append(out, end, ":\" font=\"LARGE\" layout_borders=\"Rect(10,0,0,3)\" opt_type=\"variant\" opt_variable=\"");
         Append(out, end, s.name);
         Append(out, end, "\">\n");
         for (const char* c = s.choices; *c;) {
@@ -168,13 +168,13 @@ void AppendValue(char*& out, char* end, const RvkSettingInfo& s)
         Append(out, end, "        </OptionRadioButtonGroup>\n");
         return;
     }
-    char attrs[160];
+    char attrs[192];
     if (s.type == kFloat)
         std::snprintf(attrs, sizeof(attrs),
-                      "\" value_fmt=\"&lt;font color=#70C4D0&gt;%%.2f&lt;/font&gt;\" value_scale=\"%g\"/>\n", s.step);
+                      "\" font=\"LARGE\" value_fmt=\"&lt;font color=#70C4D0&gt;%%.2f&lt;/font&gt;\" value_scale=\"%g\"/>\n", s.step);
     else
         std::snprintf(attrs, sizeof(attrs),
-                      "\" value_fmt=\"&lt;font color=#70C4D0&gt;%%.0f&lt;/font&gt;\" value_scale=\"1\"/>\n");
+                      "\" font=\"LARGE\" value_fmt=\"&lt;font color=#70C4D0&gt;%%.0f&lt;/font&gt;\" value_scale=\"1\"/>\n");
     Append(out, end, "        <OptionSlider label=\"");
     AppendEscaped(out, end, s.label);
     Append(out, end, ":\" layout_borders=\"Rect(10,0,0,3)\" opt_type=\"variant\" opt_variable=\"");
@@ -182,10 +182,10 @@ void AppendValue(char*& out, char* end, const RvkSettingInfo& s)
     Append(out, end, attrs);
 }
 
-void AppendHeading(char*& out, char* end, const char* text, int top)
+void AppendHeading(char*& out, char* end, const char* text, int top, const char* font = "HUGE")
 {
-    char attrs[64];
-    std::snprintf(attrs, sizeof(attrs), "\" layout_borders=\"Rect(0,%d,0,3)\" />\n", top);
+    char attrs[96];
+    std::snprintf(attrs, sizeof(attrs), "\" font=\"%s\" layout_borders=\"Rect(0,%d,0,3)\" />\n", font, top);
     Append(out, end, "\n        <TextView value=\"");
     AppendEscaped(out, end, text);
     Append(out, end, attrs);
@@ -203,7 +203,7 @@ void AppendExperimental(char*& out, char* end, const std::vector<RvkSettingInfo>
 
     AppendHeading(out, end, "Experimental", 6);
     Append(out, end, "        <TextView value=\"New and unfinished features. Off by default; they may be unstable or"
-                     " change.\" layout_borders=\"Rect(10,0,0,3)\" />\n");
+                     " change.\" font=\"LARGE\" layout_borders=\"Rect(10,0,0,3)\" />\n");
     // The switches, one block per feature (its own sub-switches indented).
     for (const RvkSettingInfo& p : all) {
         if (p.parent || !IsExperimental(p)) continue;
@@ -239,7 +239,7 @@ void AppendPresets(char*& out, char* end)
 {
     if (!g_presetCount) return;
     AppendHeading(out, end, "Preset", 0);
-    Append(out, end, "        <OptionRadioButtonGroup label=\"Look:\" layout_borders=\"Rect(10,0,0,3)\""
+    Append(out, end, "        <OptionRadioButtonGroup label=\"Look:\" font=\"LARGE\" layout_borders=\"Rect(10,0,0,3)\""
                      " opt_type=\"variant\" opt_variable=\"");
     Append(out, end, kPresetVar);
     Append(out, end, "\">\n");
@@ -255,7 +255,7 @@ void AppendPresets(char*& out, char* end)
     Append(out, end, line);
     Append(out, end, "        </OptionRadioButtonGroup>\n");
     Append(out, end, "        <TextView value=\"To keep a setup of your own, back up randy-vk.ini.\""
-                     " layout_borders=\"Rect(10,0,0,3)\" />\n");
+                     " font=\"LARGE\" layout_borders=\"Rect(10,0,0,3)\" />\n");
     AppendHeading(out, end, "Frame rate", 12);
     Append(out, end, kFpsCapSliderXml);
 }
@@ -290,9 +290,9 @@ void BuildXml()
            "    <ScrollViewChild name=\"rvk_scroll\">\n"
            "      <View h_alignment=\"LEFT\" view_layout=\"vertical\""
            " max_size=\"Point(16000,-1)\" layout_borders=\"Rect(0,0,10,0)\">\n"
-           "        <TextView value=\"randy-vk renderer\" layout_borders=\"Rect(0,0,0,5)\" />\n"
+           "        <TextView value=\"randy-vk renderer\" font=\"HUGE\" layout_borders=\"Rect(0,0,0,5)\" />\n"
            "        <TextView value=\"Changes apply at once. Settings are saved to randy-vk.ini.\""
-           " layout_borders=\"Rect(0,0,0,10)\" />\n");
+           " font=\"LARGE\" layout_borders=\"Rect(0,0,0,10)\" />\n");
     if (g_presetCount) AppendPresets(out, end);
     else AppendFrameRate(out, end);
     uint32_t count = g_count();
@@ -357,9 +357,9 @@ void BuildXmlV1()
            "    <ScrollViewChild name=\"rvk_scroll\">\n"
            "      <View h_alignment=\"LEFT\" view_layout=\"vertical\""
            " max_size=\"Point(16000,-1)\" layout_borders=\"Rect(0,0,10,0)\">\n"
-           "        <TextView value=\"randy-vk renderer\" layout_borders=\"Rect(0,0,0,5)\" />\n"
+           "        <TextView value=\"randy-vk renderer\" font=\"HUGE\" layout_borders=\"Rect(0,0,0,5)\" />\n"
            "        <TextView value=\"Changes apply at once. Settings are saved to randy-vk.ini.\""
-           " layout_borders=\"Rect(0,0,0,10)\" />\n");
+           " font=\"LARGE\" layout_borders=\"Rect(0,0,0,10)\" />\n");
     AppendFrameRate(out, end);
     const char* section = "";
     uint32_t count = g_count();
