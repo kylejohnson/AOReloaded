@@ -25,6 +25,23 @@ bool IsSystemModule(const wchar_t* path) {
     return path[len] == L'\\' || path[len] == L'\0';
 }
 
+// Is this module in the game's own folder (the client's DLLs)? Only those open the GUI files; other modules (drivers,
+// overlays, hooks injected by other software) are none of our business, and touching a foreign module's import table
+// - one that may be half loaded, as the game is still loading DLLs while we run - could crash the client.
+bool IsGameModule(const wchar_t* path) {
+    static wchar_t gameDir[MAX_PATH] = {};
+    static size_t gameLen = 0;
+    if (gameLen == 0) {
+        if (GetModuleFileNameW(nullptr, gameDir, MAX_PATH) == 0) return false;
+        wchar_t* slash = wcsrchr(gameDir, L'\\');
+        if (!slash) return false;
+        gameLen = static_cast<size_t>(slash - gameDir);
+        gameDir[gameLen] = L'\0';
+    }
+    if (_wcsnicmp(path, gameDir, gameLen) != 0) return false;
+    return path[gameLen] == L'\\';
+}
+
 // Patch one module's imports of `func`. Returns the number of slots patched.
 int PatchModule(HMODULE module, const char* func, void* hook) {
     if (!module) return 0;
@@ -64,6 +81,15 @@ int PatchModule(HMODULE module, const char* func, void* hook) {
     return patched;
 }
 
+// PatchModule behind a guard: a module whose headers can't be read is skipped, never a crash.
+int SafePatchModule(HMODULE module, const char* func, void* hook) {
+    __try {
+        return PatchModule(module, func, hook);
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        return -1;
+    }
+}
+
 }  // namespace
 
 int PatchImportsEverywhere(const char* func, void* hook) {
@@ -90,19 +116,21 @@ int PatchImportsEverywhere(const char* func, void* hook) {
 
                 wchar_t path[MAX_PATH] = {};
                 if (GetModuleFileNameW(entry.hModule, path, MAX_PATH) == 0 ||
-                    IsSystemModule(path)) {
+                    IsSystemModule(path) || !IsGameModule(path)) {
                     ++skipped;
                     continue;
                 }
 
-                const int n = PatchModule(entry.hModule, func, hook);
+                const int n = SafePatchModule(entry.hModule, func, hook);
+                if (n < 0)
+                    Log("[overlay] %ls: its imports could not be read - skipped", entry.szModule);
                 if (n > 0) { ++modules; total += n; }
             } while (Module32Next(snap, &entry));
         }
         CloseHandle(snap);
     }
 
-    Log("[overlay] patched imports of %s: %d slot(s) in %d game module(s), %d system skipped",
+    Log("[overlay] patched imports of %s: %d slot(s) in %d game module(s), %d others skipped",
         func, total, modules, skipped);
     return total;
 }
