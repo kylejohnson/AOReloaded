@@ -53,7 +53,6 @@ FnPresetName g_presetName;
 FnPresetIndex g_presetApply;
 FnPresetCurrent g_presetCurrent;
 bool g_syncing;                 // pushing the renderer's values into the DValues: not changes from the panel
-#define kAdvancedVar "AOR_RvkAdv"                          // AOReloaded's: the sliders in the tab (AOReloaded.ini)
 constexpr const char* kPresetVar = "RVK_Preset";       // the preset buttons (kCustom: none matches)
 constexpr int kCustom = 99;
 uint32_t g_version;
@@ -212,11 +211,18 @@ void AppendExperimental(char*& out, char* end, const std::vector<RvkSettingInfo>
         AppendCheckBox(out, end, p, 10);
         for (const RvkSettingInfo* c : ChildrenOf(all, p, true)) AppendCheckBox(out, end, *c, 30);
     }
-    // Then each feature's values, under its label.
+}
+
+// The experimental features' values (sliders, choices), each under its feature's label - in the Advanced tab.
+void AppendExperimentalValues(char*& out, char* end, const std::vector<RvkSettingInfo>& all)
+{
+    bool heading = false;
     for (const RvkSettingInfo& p : all) {
         if (p.parent || !IsExperimental(p)) continue;
         std::vector<const RvkSettingInfo*> values = ChildrenOf(all, p, false);
         if (values.empty()) continue;
+        if (!heading) AppendHeading(out, end, "Experimental", 16);
+        heading = true;
         AppendHeading(out, end, p.label, 8);
         for (const RvkSettingInfo* v : values) AppendValue(out, end, *v);
     }
@@ -318,32 +324,42 @@ void BuildXml()
     // The experimental features, right under the switches: new and unfinished, off by default.
     AppendExperimental(out, end, all);
 
-    // Values: a block per feature (its label) or, for values of no feature, one per section - only with "Advanced
-    // settings" on when the game started. The options window lays out every tab's views each time it opens (~150 ms
-    // with all ~220 settings); the game reads this layout once a session, so the checkbox takes effect after a
-    // restart. (Hiding the block at run time left its sliders without a size: they sent NaN - user, 2026-10-14.)
-    const bool advanced = SettingsGetInt(kAdvancedVar) != 0;
     Append(out, end,
-           "        <OptionCheckBox label=\"Advanced settings: every slider and choice (after restarting the game)\""
-           " font=\"LARGE\" layout_borders=\"Rect(0,16,0,0)\" opt_type=\"variant\" opt_variable=\"" kAdvancedVar "\"/>\n");
-    if (advanced) {
-        AppendHeading(out, end, "Adjustments", 16);
-        const char* heading = "";
-        for (const RvkSettingInfo& s : all) {
-            if (!s.parent && IsExperimental(s)) continue;
-            if (s.type == kBool && !s.parent) {
-                std::vector<const RvkSettingInfo*> values = ChildrenOf(all, s, false);
-                if (values.empty()) continue;
-                AppendHeading(out, end, s.label, 8);
-                heading = s.label;
-                for (const RvkSettingInfo* v : values) AppendValue(out, end, *v);
-            } else if (s.type != kBool && !s.parent) {
-                if (!Is(heading, s.section)) AppendHeading(out, end, s.section, 8);
-                heading = s.section;
-                AppendValue(out, end, s);
-            }
+           "\n"
+           "        <VLayoutSpacer/>\n"
+           "      </View>\n"
+           "    </ScrollViewChild>\n"
+           "  </ScrollView>\n");
+
+    // The Advanced tab, right after: every value (sliders, choices) - a block per feature (its label) or, for values
+    // of no feature, one per section; then the experimental features' values. (A tab of its own: the Renderer tab
+    // stays short, and the game builds both itself - no hooks.)
+    Append(out, end,
+           "\n"
+           "  <ScrollView h_alignment=\"LEFT\" label=\"Advanced\" v_scrollbar_mode=\"auto\""
+           " scroll_client=\"rvk_adv_scroll\" max_size=\"Point(16000,-1)\">\n"
+           "    <ScrollViewChild name=\"rvk_adv_scroll\">\n"
+           "      <View h_alignment=\"LEFT\" view_layout=\"vertical\""
+           " max_size=\"Point(16000,-1)\" layout_borders=\"Rect(0,0,10,0)\">\n"
+           "        <TextView value=\"randy-vk renderer: advanced\" font=\"HUGE\" layout_borders=\"Rect(0,0,0,5)\" />\n"
+           "        <TextView value=\"Every slider and choice. Changes apply at once. Settings are saved to"
+           " randy-vk.ini.\" font=\"LARGE\" layout_borders=\"Rect(0,0,0,10)\" />\n");
+    const char* heading = "";
+    for (const RvkSettingInfo& s : all) {
+        if (!s.parent && IsExperimental(s)) continue;
+        if (s.type == kBool && !s.parent) {
+            std::vector<const RvkSettingInfo*> values = ChildrenOf(all, s, false);
+            if (values.empty()) continue;
+            AppendHeading(out, end, s.label, 8);
+            heading = s.label;
+            for (const RvkSettingInfo* v : values) AppendValue(out, end, *v);
+        } else if (s.type != kBool && !s.parent) {
+            if (!Is(heading, s.section)) AppendHeading(out, end, s.section, 8);
+            heading = s.section;
+            AppendValue(out, end, s);
         }
     }
+    AppendExperimentalValues(out, end, all);
     end = g_xml + sizeof(g_xml) - 1;
     Append(out, end,
            "\n"

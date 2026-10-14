@@ -61,7 +61,6 @@ static SettingDef g_settings[] = {
     { "AOR_FpsCap",    SettingType::Int, 100,     100,     30,  500 },
     { "AOR_BagMove",   SettingType::Bool,  1,       1,      0,    1 },
     { "AOR_AltSelect", SettingType::Bool,  1,       1,      0,    1 },
-    { "AOR_RvkAdv",    SettingType::Bool,  0,       0,      0,    1 },
     { "AOR_InvPins",   SettingType::Bool,  1,       1,      0,    1 },
     { "AOR_SkillFavs", SettingType::Bool,  1,       1,      0,    1 },
     { "AOR_SkillShift", SettingType::Bool, 1,       1,      0,    1 },
@@ -473,7 +472,7 @@ static const char* AorXmlBlock() {
     return block;
 }
 
-// Remove any AOReloaded/Renderer <ScrollView> blocks. Used both to make the
+// Remove any AOReloaded/Renderer/Advanced <ScrollView> blocks. Used both to make the
 // in-memory injection idempotent and to repair files older builds edited on
 // disk. Returns true if anything was removed.
 static bool StripRootBlocks(std::string& xml) {
@@ -486,10 +485,12 @@ static bool StripRootBlocks(std::string& xml) {
         const size_t tagEnd = xml.find('>', start);
         const size_t aor = xml.find("label=\"AOReloaded\"", start);
         const size_t rvk = xml.find("label=\"Renderer\"", start);
+        const size_t adv = xml.find("label=\"Advanced\"", start);
         const bool isOurs =
             tagEnd != std::string::npos &&
             ((aor != std::string::npos && aor < tagEnd + 1) ||
-             (rvk != std::string::npos && rvk < tagEnd + 1));
+             (rvk != std::string::npos && rvk < tagEnd + 1) ||
+             (adv != std::string::npos && adv < tagEnd + 1));
         if (!isOurs) {
             search = start + 1;
             continue;
@@ -506,8 +507,8 @@ static bool StripRootBlocks(std::string& xml) {
     return removed;
 }
 
-// Add the current AOReloaded tab (and the Renderer tab, when a renderer with
-// a settings interface is loaded) before </root>.
+// Add the current AOReloaded tab (and the Renderer and Advanced tabs, when a
+// renderer with a settings interface is loaded) before </root>.
 static void InjectRootBlocks(std::string& xml) {
     const size_t end = xml.rfind("</root>");
     if (end == std::string::npos) return;
