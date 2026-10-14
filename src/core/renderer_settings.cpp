@@ -6,8 +6,10 @@
 #include "core/logging.h"
 #include "core/settings.h"
 #include "core/fps_cap.h"
+#include "hooks/hook_engine.h"
 
 #include <windows.h>
+#include <algorithm>
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
@@ -52,6 +54,8 @@ FnPresetName g_presetName;
 FnPresetIndex g_presetApply;
 FnPresetCurrent g_presetCurrent;
 bool g_syncing;                 // pushing the renderer's values into the DValues: not changes from the panel
+#define kAdvancedVar "AOR_RvkAdv"                          // AOReloaded's: the advanced block shown (AOReloaded.ini)
+#define kAdvancedExpression "dvalue:" kAdvancedVar        // the advanced block's view_enable_expression
 constexpr const char* kPresetVar = "RVK_Preset";       // the preset buttons (kCustom: none matches)
 constexpr int kCustom = 99;
 uint32_t g_version;
@@ -316,7 +320,14 @@ void BuildXml()
     // The experimental features, right under the switches: new and unfinished, off by default.
     AppendExperimental(out, end, all);
 
-    // Values: a block per feature (its label) or, for values of no feature, one per section.
+    // Values: a block per feature (its label) or, for values of no feature, one per section - all in one view the
+    // "Advanced settings" checkbox shows and hides (view_enable_expression on it; EnableDetour hides it while disabled:
+    // the options window lays out only what is shown each time it opens).
+    Append(out, end,
+           "        <OptionCheckBox label=\"Advanced settings (every slider and choice)\" font=\"LARGE\""
+           " layout_borders=\"Rect(0,16,0,0)\" opt_type=\"variant\" opt_variable=\"" kAdvancedVar "\"/>\n"
+           "        <View h_alignment=\"LEFT\" view_layout=\"vertical\" max_size=\"Point(16000,-1)\""
+           " view_enable_expression=\"" kAdvancedExpression "\">\n");
     AppendHeading(out, end, "Adjustments", 16);
     const char* heading = "";
     for (const RvkSettingInfo& s : all) {
@@ -335,6 +346,7 @@ void BuildXml()
     }
     end = g_xml + sizeof(g_xml) - 1;
     Append(out, end,
+           "        </View>\n"
            "\n"
            "        <VLayoutSpacer/>\n"
            "      </View>\n"
@@ -383,6 +395,65 @@ void BuildXmlV1()
     *out = '\0';
 }
 
+// ---- the "Advanced settings" block: hidden while its enable expression is false ----
+// GUI.dll greys a view out by view_enable_expression but still lays it out; the options window lays out every tab's
+// views each time it opens (~150 ms with the Renderer tab's ~220 settings). View::Enable runs when a view's state
+// changes; for the advanced block a hide (View::Show(false) - a hide count, so kept balanced) goes with it.
+using EnableFn = void(__fastcall*)(void* self, void* edx, bool on);
+using ShowFn = void(__fastcall*)(void* self, void* edx, bool show, bool relative);
+using GetExpressionFn = void*(__fastcall*)(const void* self, void* edx, void* result);
+using StringCStrFn = const char*(__fastcall*)(const void* self, void* edx);
+using StringDtorFn = void(__fastcall*)(void* self, void* edx);
+EnableFn g_enable = nullptr;
+ShowFn g_show = nullptr;
+GetExpressionFn g_getExpression = nullptr;
+StringCStrFn g_cstr = nullptr;
+StringDtorFn g_stringDtor = nullptr;
+std::vector<void*> g_hiddenViews;               // advanced blocks we hid (each un-hidden once, never twice)
+
+bool IsAdvancedBlock(void* view)
+{
+    alignas(8) uint8_t text[64] = {};           // a String (Utils.dll), returned by value
+    g_getExpression(view, nullptr, text);
+    const char* s = g_cstr(text, nullptr);
+    const bool ours = s && std::strcmp(s, kAdvancedExpression) == 0;
+    g_stringDtor(text, nullptr);
+    return ours;
+}
+
+void __fastcall EnableDetour(void* self, void* edx, bool on)
+{
+    g_enable(self, edx, on);
+    if (!IsAdvancedBlock(self)) return;
+    auto it = std::find(g_hiddenViews.begin(), g_hiddenViews.end(), self);
+    const bool hidden = it != g_hiddenViews.end();
+    if (!on && !hidden) {
+        g_show(self, nullptr, false, false);
+        g_hiddenViews.push_back(self);
+    } else if (on && hidden) {
+        g_show(self, nullptr, true, false);
+        g_hiddenViews.erase(it);
+    }
+}
+
+void InstallAdvancedToggle()
+{
+    HMODULE gui = GetModuleHandleA("GUI.dll"), utils = GetModuleHandleA("Utils.dll");
+    void* enable = gui ? reinterpret_cast<void*>(GetProcAddress(gui, "?Enable@View@@QAEX_N@Z")) : nullptr;
+    g_show = gui ? reinterpret_cast<ShowFn>(GetProcAddress(gui, "?Show@View@@QAEX_N0@Z")) : nullptr;
+    g_getExpression = gui ? reinterpret_cast<GetExpressionFn>(
+                                GetProcAddress(gui, "?GetEnableExpression@View@@QBE?AVString@@XZ")) : nullptr;
+    g_cstr = utils ? reinterpret_cast<StringCStrFn>(GetProcAddress(utils, "?c_str@String@@QBEPBDXZ")) : nullptr;
+    g_stringDtor = utils ? reinterpret_cast<StringDtorFn>(GetProcAddress(utils, "??1String@@QAE@XZ")) : nullptr;
+    void* trampoline = nullptr;
+    if (!enable || !g_show || !g_getExpression || !g_cstr || !g_stringDtor ||
+        !InstallHook(enable, reinterpret_cast<void*>(&EnableDetour), &trampoline)) {
+        Log("[renderer] advanced block toggle unavailable (GUI.dll / Utils.dll exports or hook) - it is greyed out instead");
+        return;
+    }
+    g_enable = reinterpret_cast<EnableFn>(trampoline);
+}
+
 }  // namespace
 
 void RendererSettingsRegisterAll()
@@ -409,8 +480,12 @@ void RendererSettingsRegisterAll()
     if (g_presetCount) {
         GameAPI::RegisterInt(kPresetVar, CurrentPreset());
     }
-    if (g_version >= 2) BuildXml();
-    else BuildXmlV1();
+    if (g_version >= 2) {
+        BuildXml();
+        InstallAdvancedToggle();
+    } else {
+        BuildXmlV1();
+    }
     Log("[renderer] %u renderer settings registered (interface %u, options XML %u bytes)", count, g_version,
         static_cast<unsigned>(std::strlen(g_xml)));
 }

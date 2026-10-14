@@ -61,6 +61,7 @@ static SettingDef g_settings[] = {
     { "AOR_FpsCap",    SettingType::Int, 100,     100,     30,  500 },
     { "AOR_BagMove",   SettingType::Bool,  1,       1,      0,    1 },
     { "AOR_AltSelect", SettingType::Bool,  1,       1,      0,    1 },
+    { "AOR_RvkAdv",    SettingType::Bool,  0,       0,      0,    1 },
     { "AOR_InvPins",   SettingType::Bool,  1,       1,      0,    1 },
     { "AOR_SkillFavs", SettingType::Bool,  1,       1,      0,    1 },
     { "AOR_SkillShift", SettingType::Bool, 1,       1,      0,    1 },
