@@ -40,9 +40,6 @@ constexpr ProloguePattern kPrologues[] = {
     // The MOV ECX,[addr32] uses absolute addressing — safe to relocate.
     // Must copy 9 bytes to include the full 6-byte MOV instruction.
     {{0x55, 0x8B, 0xEC, 0x8B, 0x0D}, {0xFF, 0xFF, 0xFF, 0xFF, 0xFF}, 9, "frame+mov-ecx-abs"},
-    // push ebp; mov ebp,esp; mov eax,[ecx+disp32]  (9 bytes: 55 8B EC 8B 81 xx xx xx xx - View::Enable)
-    // Register-relative, no IP-relative part: safe to relocate.
-    {{0x55, 0x8B, 0xEC, 0x8B, 0x81}, {0xFF, 0xFF, 0xFF, 0xFF, 0xFF}, 9, "frame+mov-eax-ecx-disp32"},
     // mov eax, imm32 — 5-byte relocatable instruction; used by MSVC as an
     // SEH-prolog entry thunk (sets EH handler address, then jmp/call to
     // _SEH_prolog). Safe to relocate into trampoline since it's IP-independent.
