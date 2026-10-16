@@ -22,4 +22,8 @@ const char* RendererXmlBlock();
 // For the SetDValue detour: a renderer setting changed in the options panel. True if `name` is one.
 bool RendererOnSetDValue(const char* name, const AOVariant& value);
 
+// Once a frame on the game thread: with the renderer loaded, the game's ground render mode stays at Shadows (its
+// grass, valley mist and terrain lighting read the ground as that mode draws it - base pass + lightmap pass).
+void RendererTick();
+
 }  // namespace aor

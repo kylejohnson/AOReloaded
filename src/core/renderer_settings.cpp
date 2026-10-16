@@ -300,7 +300,9 @@ void BuildXml()
            " max_size=\"Point(16000,-1)\" layout_borders=\"Rect(0,0,10,0)\">\n"
            "        <TextView value=\"randy-vk renderer\" font=\"HUGE\" layout_borders=\"Rect(0,0,0,5)\" />\n"
            "        <TextView value=\"Changes apply at once. Settings are saved to randy-vk.ini.\""
-           " font=\"LARGE\" layout_borders=\"Rect(0,0,0,10)\" />\n");
+           " font=\"LARGE\" layout_borders=\"Rect(0,0,0,3)\" />\n"
+           "        <TextView value=\"The game's ground render mode stays at Shadows: the grass and the terrain's"
+           " lighting need it.\" font=\"LARGE\" layout_borders=\"Rect(0,0,0,10)\" />\n");
     if (g_presetCount) AppendPresets(out, end);
     else AppendFrameRate(out, end);
     uint32_t count = g_count();
@@ -410,6 +412,29 @@ void BuildXmlV1()
     *out = '\0';
 }
 
+// The game's ground render mode (video options: Simple, Shadows, Optimized, Autodetect): randy-vk reads the ground
+// as Shadows draws it - a base pass and a lightmap pass - for its grass, valley mist and terrain lighting, so with the
+// renderer loaded it stays at Shadows.
+constexpr const char* kGroundModeVar = "GroundRendering";
+constexpr int kGroundShadows = 1;
+
+void KeepGroundShadows()
+{
+    if (!GameAPI::Exists(kGroundModeVar)) return;
+    AOVariant v{};
+    if (!GameAPI::GetVariant(kGroundModeVar, v)) return;
+    int mode;
+    switch (static_cast<VariantType>(v.type)) {
+    case VariantType::Int: mode = v.as_int; break;
+    case VariantType::Float: mode = static_cast<int>(v.as_float); break;
+    case VariantType::Double: mode = static_cast<int>(v.as_double); break;
+    default: return;
+    }
+    if (mode == kGroundShadows) return;
+    GameAPI::SetInt(kGroundModeVar, kGroundShadows);
+    Log("[renderer] ground render mode %d -> Shadows (randy-vk's grass and terrain lighting need it)", mode);
+}
+
 }  // namespace
 
 void RendererSettingsRegisterAll()
@@ -444,8 +469,19 @@ void RendererSettingsRegisterAll()
 
 const char* RendererXmlBlock() { return g_available ? g_xml : nullptr; }
 
+void RendererTick()
+{
+    static uint32_t frames;
+    if (g_available && ++frames % 60 == 1)       // (about once a second; the hook below catches changes at once)
+        KeepGroundShadows();
+}
+
 bool RendererOnSetDValue(const char* name, const AOVariant& value)
 {
+    if (g_available && std::strcmp(name, kGroundModeVar) == 0) {
+        KeepGroundShadows();                    // another mode chosen in the video options: back to Shadows
+        return true;
+    }
     if (!g_available || std::strncmp(name, "RVK_", 4) != 0)
         return false;
     if (g_syncing)
